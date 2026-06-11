@@ -13,9 +13,12 @@
     --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--bg)}
   body{
     font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    background:radial-gradient(1100px 560px at 50% -12%, #2a1605 0%, var(--bg) 58%);
+    background:var(--bg);
+    background-image:radial-gradient(1100px 620px at 50% -18%, #1c0f04 0%, rgba(12,13,15,0) 60%);
+    background-attachment:fixed;
     color:var(--text); min-height:100vh;
     display:flex; align-items:flex-start; justify-content:center;
     padding:36px 18px 60px; line-height:1.5;
