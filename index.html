@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trình tạo mã 2FA (TOTP)</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"
+        onerror="var s=document.createElement('script');s.src='https://unpkg.com/jsqr@1.4.0/dist/jsQR.js';document.head.appendChild(s);"></script>
 <style>
   :root{
     --bg:#0c0d0f; --panel:#16181c; --panel-2:#1e2126; --line:#2c3037;
@@ -254,7 +255,12 @@ function qrSay(msg, ok){
   $qrmsg.className = 'qrmsg ' + (ok === true ? 'ok' : ok === false ? 'bad' : '');
 }
 
-function decodeImage(img){
+function decodeImage(img, attempt){
+  attempt = attempt || 0;
+  if(typeof jsQR !== 'function'){
+    if(attempt < 20){ qrSay('Đang tải bộ đọc QR…'); setTimeout(() => decodeImage(img, attempt+1), 300); return; }
+    qrSay('Chưa tải được bộ đọc QR — kiểm tra kết nối mạng rồi thử lại.', false); return;
+  }
   const max = 1000;
   let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
   const scale = Math.min(1, max / Math.max(w, h));
@@ -264,9 +270,6 @@ function decodeImage(img){
   const ctx = canvas.getContext('2d');
   ctx.drawImage(img, 0, 0, w, h);
   const data = ctx.getImageData(0, 0, w, h);
-  if(typeof jsQR !== 'function'){
-    qrSay('Chưa tải được bộ đọc QR — cần mạng khi mở trang.', false); return;
-  }
   const res = jsQR(data.data, w, h, { inversionAttempts: 'attemptBoth' });
   if(res && res.data){
     $secret.value = res.data.trim();
