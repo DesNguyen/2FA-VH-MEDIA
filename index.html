@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trình tạo mã 2FA (TOTP)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
 <style>
   :root{
     --bg:#0c0d0f; --panel:#16181c; --panel-2:#1e2126; --line:#2c3037;
@@ -63,6 +64,19 @@
   .copied{color:var(--accent); font-size:13px; font-weight:600}
   .note{font-size:11.5px; color:#6b7686; margin-top:22px; text-align:center; line-height:1.6}
   .note b{color:var(--warn)}
+
+  .qr{margin-top:14px}
+  .qrzone{border:1.5px dashed var(--line); border-radius:12px; background:var(--panel-2);
+    padding:16px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s}
+  .qrzone:hover, .qrzone.drag{border-color:var(--accent); background:#22150a}
+  .qrzone .ic{font-size:22px}
+  .qrzone .t{font-size:13px; font-weight:600; margin-top:4px}
+  .qrzone .s{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .qrmsg{font-size:12px; margin-top:8px; min-height:16px}
+  .qrmsg.ok{color:var(--accent)} .qrmsg.bad{color:var(--warn)}
+  .divider{display:flex; align-items:center; gap:10px; margin:16px 0; color:var(--muted); font-size:11px;
+    text-transform:uppercase; letter-spacing:.12em}
+  .divider::before, .divider::after{content:""; flex:1; height:1px; background:var(--line)}
 </style>
 </head>
 <body>
@@ -75,6 +89,18 @@
   </div>
 
   <div class="panel">
+    <div class="qr">
+      <div class="qrzone" id="qrzone">
+        <div class="ic">🖼️</div>
+        <div class="t">Dán, kéo-thả hoặc chọn ảnh mã QR</div>
+        <div class="s">Đọc QR khi bật 2FA để tự lấy secret</div>
+      </div>
+      <div class="qrmsg" id="qrmsg"></div>
+      <input type="file" id="qrfile" accept="image/*" style="display:none">
+    </div>
+
+    <div class="divider">hoặc nhập thủ công</div>
+
     <label for="secret">Secret / link otpauth</label>
     <input type="text" id="secret" autocomplete="off" autocapitalize="off"
            spellcheck="false" placeholder="JBSWY3DPEHPK3PXP  hoặc  otpauth://totp/...">
@@ -218,6 +244,77 @@ $copy.addEventListener('click', async () => {
   catch(e){ const t=document.createElement('textarea'); t.value=currentCode; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
   $status.style.visibility='visible'; setTimeout(()=>$status.style.visibility='hidden',1500);
 });
+// ---------- Đọc mã QR từ ảnh ----------
+const $qrzone = document.getElementById('qrzone');
+const $qrfile = document.getElementById('qrfile');
+const $qrmsg  = document.getElementById('qrmsg');
+
+function qrSay(msg, ok){
+  $qrmsg.textContent = msg;
+  $qrmsg.className = 'qrmsg ' + (ok === true ? 'ok' : ok === false ? 'bad' : '');
+}
+
+function decodeImage(img){
+  const max = 1000;
+  let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const scale = Math.min(1, max / Math.max(w, h));
+  w = Math.round(w * scale); h = Math.round(h * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  if(typeof jsQR !== 'function'){
+    qrSay('Chưa tải được bộ đọc QR — cần mạng khi mở trang.', false); return;
+  }
+  const res = jsQR(data.data, w, h, { inversionAttempts: 'attemptBoth' });
+  if(res && res.data){
+    $secret.value = res.data.trim();
+    refresh();
+    qrSay('Đã đọc QR ✓', true);
+  }else{
+    qrSay('Không tìm thấy mã QR trong ảnh. Thử ảnh rõ/cắt sát hơn.', false);
+  }
+}
+
+function handleFile(file){
+  if(!file || !file.type.startsWith('image/')){ qrSay('Đây không phải ảnh.', false); return; }
+  qrSay('Đang đọc…');
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => decodeImage(img);
+    img.onerror = () => qrSay('Không mở được ảnh.', false);
+    img.src = reader.result;
+  };
+  reader.onerror = () => qrSay('Không đọc được tệp.', false);
+  reader.readAsDataURL(file);
+}
+
+$qrzone.addEventListener('click', () => $qrfile.click());
+$qrfile.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+['dragenter','dragover'].forEach(ev => $qrzone.addEventListener(ev, e => {
+  e.preventDefault(); $qrzone.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev => $qrzone.addEventListener(ev, e => {
+  e.preventDefault(); $qrzone.classList.remove('drag');
+}));
+$qrzone.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+
+window.addEventListener('paste', e => {
+  const items = (e.clipboardData || {}).items || [];
+  for(const it of items){
+    if(it.type && it.type.startsWith('image/')){
+      const f = it.getAsFile();
+      if(f){ handleFile(f); e.preventDefault(); return; }
+    }
+  }
+});
+
 (function initFromUrl(){
   const q = new URLSearchParams(location.search);
   const v = q.get('secret')||q.get('token')||q.get('tok')||q.get('otpauth');
